@@ -1,0 +1,297 @@
+// Design tokens and the small set of primitives the two views are built from.
+// The visual language follows the Arknights: Endfield site: near-black on a warm
+// off-white, zero corner radius, left-edge active bars, opposing corner ticks,
+// and a 45-degree hatched primary button.
+
+export struct PackageRow {
+    name: string,
+    id: string,
+    current: string,
+    available: string,
+    selected: bool,
+}
+
+export struct PinRow {
+    name: string,
+    id: string,
+    kind: string,
+    blocking: bool,
+}
+
+export global Theme {
+    out property <color> paper: #EDEDE8;
+    out property <color> panel: #FAFAF8;
+    out property <color> panel-2: #E4E4DE;
+    out property <color> ink: #191919;
+    out property <color> ink-2: #6E6E66;
+    out property <color> ink-3: #9C9C93;
+    out property <color> line: #D4D4CB;
+    out property <color> signal: #DCE400;
+    out property <color> selected-bg: #F5F7D5;
+    out property <color> block: #C4301C;
+    out property <color> on-dark: #F2F2EC;
+
+    // All three ship with Windows 11. Bahnschrift is the closest thing on the
+    // system to the site's Novecento Sans Wide.
+    out property <string> display-font: "Bahnschrift";
+    out property <string> ui-font: "Segoe UI";
+    out property <string> mono-font: "Consolas";
+}
+
+// Two opposing L-marks instead of a full frame.
+export component CornerTicks inherits Rectangle {
+    in property <color> mark: Theme.ink;
+    in property <length> arm: 9px;
+    background: transparent;
+
+    Rectangle { x: 0; y: 0; width: root.arm; height: 1.5px; background: root.mark; }
+    Rectangle { x: 0; y: 0; width: 1.5px; height: root.arm; background: root.mark; }
+    Rectangle { x: root.width - root.arm; y: root.height - 1.5px; width: root.arm; height: 1.5px; background: root.mark; }
+    Rectangle { x: root.width - 1.5px; y: root.height - root.arm; width: 1.5px; height: root.arm; background: root.mark; }
+}
+
+export component GhostButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> danger: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    property <bool> lit: ta.has-hover && root.enabled;
+    property <color> tone: root.lit ? (root.danger ? Theme.block : Theme.ink) : Theme.ink-2;
+
+    height: 25px;
+    background: transparent;
+    border-width: 1px;
+    border-color: root.lit ? root.tone : Theme.line;
+    opacity: root.enabled ? 1.0 : 0.4;
+    horizontal-stretch: 0;
+
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 9px;
+        alignment: center;
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            font-family: Theme.ui-font;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.8px;
+            color: root.tone;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Lifted from the site's "Go to Game" call to action: solid ground, 45-degree
+// stripes and a triangle mark. Hovering flips the whole button to the Endfield
+// signal yellow, hazard stripes and all.
+export component HatchButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    property <bool> lit: ta.has-hover && root.enabled;
+    // Ink on yellow when lit, near-white on near-black at rest. The stripes are
+    // deliberately low-contrast so they read as texture and not as noise behind
+    // the label.
+    property <color> tone: root.lit ? Theme.ink : Theme.on-dark;
+
+    height: 46px;
+    border-width: 1.5px;
+    border-color: Theme.ink;
+    background: root.lit ? Theme.signal : Theme.ink;
+    opacity: root.enabled ? 1.0 : 0.32;
+    clip: true;
+    horizontal-stretch: 0;
+
+    Image {
+        width: 100%;
+        height: 100%;
+        source: root.lit
+            ? @image-url("assets/hatch-signal.svg")
+            : @image-url("assets/hatch.svg");
+        horizontal-tiling: repeat;
+        vertical-tiling: repeat;
+    }
+
+    // The triangle sits inline with the label as a plain mark. It used to have a
+    // hairline dividing it off, copied from the site's button, but that read as a
+    // split button with a dropdown, which this is not.
+    HorizontalLayout {
+        padding-left: 20px;
+        padding-right: 22px;
+        spacing: 11px;
+        alignment: center;
+        Rectangle {
+            horizontal-stretch: 0;
+            width: 15px;
+            Path {
+                y: (parent.height - self.height) / 2;
+                width: 15px;
+                height: 15px;
+                viewbox-width: 16;
+                viewbox-height: 16;
+                fill: root.tone;
+                MoveTo { x: 8; y: 1.7; }
+                LineTo { x: 14.3; y: 13; }
+                LineTo { x: 1.7; y: 13; }
+                Close { }
+            }
+        }
+        Text {
+            horizontal-stretch: 0;
+            text: root.label;
+            vertical-alignment: center;
+            font-family: Theme.display-font;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 1.3px;
+            color: root.tone;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component TickBox inherits Rectangle {
+    in property <bool> checked;
+    in property <bool> mixed: false;
+    in property <bool> enabled: true;
+    callback toggled();
+
+    width: 16px;
+    height: 16px;
+    border-width: 1.5px;
+    border-color: root.checked || root.mixed || (ta.has-hover && root.enabled) ? Theme.ink : Theme.ink-2;
+    background: root.checked || root.mixed ? Theme.signal : transparent;
+    opacity: root.enabled ? 1.0 : 0.35;
+
+    if root.checked && !root.mixed : Path {
+        x: 2px;
+        y: 2px;
+        width: 12px;
+        height: 12px;
+        viewbox-width: 16;
+        viewbox-height: 16;
+        stroke: Theme.ink;
+        stroke-width: 2.6px;
+        MoveTo { x: 3.2; y: 8.4; }
+        LineTo { x: 6.3; y: 11.5; }
+        LineTo { x: 12.7; y: 4.9; }
+    }
+
+    if root.mixed : Rectangle {
+        x: 3.5px;
+        y: 6.5px;
+        width: 9px;
+        height: 2.5px;
+        background: Theme.ink;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}
+
+export component Badge inherits Rectangle {
+    in property <string> label;
+    in property <color> tone: Theme.ink-2;
+
+    height: 20px;
+    border-width: 1px;
+    border-color: root.tone;
+    background: transparent;
+    horizontal-stretch: 0;
+
+    HorizontalLayout {
+        padding-left: 7px;
+        padding-right: 9px;
+        spacing: 6px;
+        Rectangle {
+            width: 6px;
+            Rectangle {
+                y: (parent.height - 6px) / 2;
+                width: 6px;
+                height: 6px;
+                background: root.tone;
+            }
+        }
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            font-family: Theme.mono-font;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            color: root.tone;
+        }
+    }
+}
+
+// A number over a small uppercase caption, used for the counts in each header.
+export component Tally inherits Rectangle {
+    in property <string> caption;
+    in property <int> value;
+
+    VerticalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        padding-top: 7px;
+        padding-bottom: 7px;
+        spacing: 1px;
+        Text {
+            text: "\{root.value}";
+            font-family: Theme.mono-font;
+            font-size: 19px;
+            font-weight: 700;
+            color: Theme.ink;
+        }
+        Text {
+            text: root.caption;
+            font-family: Theme.mono-font;
+            font-size: 8px;
+            letter-spacing: 1.4px;
+            color: Theme.ink-3;
+        }
+    }
+}
+
+// An indeterminate activity strip: a signal-yellow segment sweeping the width of
+// the header's bottom rule. One timer tick per sweep drives an animated x, rather
+// than a fast timer redrawing every frame.
+export component ActivityBar inherits Rectangle {
+    in property <bool> active;
+
+    private property <bool> flip: false;
+
+    height: 2px;
+    background: root.active ? Theme.panel-2 : transparent;
+    clip: true;
+
+    Timer {
+        interval: 780ms;
+        running: root.active;
+        triggered => { root.flip = !root.flip; }
+    }
+
+    Rectangle {
+        width: parent.width * 0.3;
+        height: parent.height;
+        background: Theme.signal;
+        opacity: root.active ? 1.0 : 0.0;
+        x: root.flip ? parent.width - self.width : 0px;
+        animate x { duration: 780ms; easing: ease-in-out; }
+    }
+}

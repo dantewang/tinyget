@@ -1,0 +1,23 @@
+[package]
+name = "tinyget"
+version = "0.1.0"
+edition = "2021"
+description = "A small Slint front end for the winget package manager"
+license = "MIT"
+
+[dependencies]
+slint = "1.17"
+unicode-width = "0.2"
+
+[build-dependencies]
+slint-build = "1.17"
+
+# Embeds the application icon as a Windows resource, which is what the taskbar,
+# Explorer and the title bar read.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

@@ -1,0 +1,1008 @@
+import { ListView } from "std-widgets.slint";
+import {
+    Theme, PackageRow, PinRow,
+    CornerTicks, GhostButton, HatchButton, TickBox, Badge, Tally, ActivityBar
+} from "theme.slint";
+
+export { PackageRow, PinRow }
+
+// Column widths shared by the header strip and the rows beneath it, so the two
+// stay aligned as the window resizes.
+global Cols {
+    out property <length> gutter: 26px;
+    out property <length> check: 26px;
+    out property <length> version: 205px;
+    out property <length> actions: 124px;
+    out property <length> gap: 12px;
+}
+
+component ColLabel inherits Text {
+    in property <TextHorizontalAlignment> halign: left;
+    vertical-alignment: center;
+    horizontal-alignment: root.halign;
+    font-family: Theme.mono-font;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: Theme.ink-3;
+}
+
+component ColumnHead inherits Rectangle {
+    in property <string> third;
+    in property <string> fourth;
+
+    height: 27px;
+    background: Theme.paper;
+    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line; }
+
+    HorizontalLayout {
+        padding-left: Cols.gutter;
+        padding-right: Cols.gutter;
+        spacing: Cols.gap;
+        Rectangle { width: Cols.check; }
+        // Each column is an explicit cell with the label filling it, so a label
+        // narrower than its column still starts at the column edge.
+        Rectangle {
+            horizontal-stretch: 15;
+            min-width: 0px;
+            preferred-width: 0px;
+            ColLabel { width: 100%; height: 100%; text: "PACKAGE"; }
+        }
+        Rectangle {
+            horizontal-stretch: 10;
+            min-width: 0px;
+            preferred-width: 0px;
+            ColLabel { width: 100%; height: 100%; text: "IDENTIFIER"; }
+        }
+        ColLabel { width: Cols.version; text: root.third; }
+        ColLabel { width: Cols.actions; text: root.fourth; halign: right; }
+    }
+}
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <int> count;
+    in property <bool> active;
+    callback clicked();
+
+    height: 42px;
+    background: root.active || ta.has-hover ? Theme.panel-2 : transparent;
+
+    Rectangle {
+        x: 0;
+        width: 3px;
+        background: root.active ? Theme.ink : transparent;
+    }
+
+    HorizontalLayout {
+        padding-left: 17px;
+        padding-right: 16px;
+        spacing: 8px;
+        Text {
+            text: root.label;
+            vertical-alignment: center;
+            font-size: 14px;
+            font-weight: root.active ? 600 : 400;
+            color: root.active ? Theme.ink : Theme.ink-2;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Rectangle {
+            horizontal-stretch: 0;
+            width: 26px;
+            Rectangle {
+                y: (parent.height - 18px) / 2;
+                width: 26px;
+                height: 18px;
+                background: root.active ? Theme.ink : Theme.panel-2;
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "\{root.count}";
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-family: Theme.mono-font;
+                    font-size: 11px;
+                    font-weight: 700;
+                    color: root.active ? Theme.paper : Theme.ink-2;
+                }
+            }
+        }
+    }
+
+    ta := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component UpgradeItem inherits Rectangle {
+    in property <PackageRow> pkg;
+    in property <bool> interactive: true;
+    callback toggled();
+    callback pin-requested();
+
+    height: 46px;
+    background: root.pkg.selected ? Theme.selected-bg : (ta.has-hover ? Theme.panel : transparent);
+
+    ta := TouchArea { width: 100%; height: 100%; }
+    Rectangle { x: 0; width: 3px; background: root.pkg.selected ? Theme.signal : transparent; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line; }
+
+    HorizontalLayout {
+        padding-left: Cols.gutter;
+        padding-right: Cols.gutter;
+        spacing: Cols.gap;
+
+        Rectangle {
+            width: Cols.check;
+            TickBox {
+                y: (parent.height - self.height) / 2;
+                checked: root.pkg.selected;
+                enabled: root.interactive;
+                toggled => { root.toggled(); }
+            }
+        }
+
+        // Each row is its own layout, and stretch is distributed on top of each
+        // cell's preferred width. Zeroing that makes the split depend on the
+        // stretch factors alone, so a long package name widens no column and the
+        // identifier lines up down the list.
+        Rectangle {
+            horizontal-stretch: 15;
+            min-width: 0px;
+            preferred-width: 0px;
+            Text {
+                width: 100%;
+                height: 100%;
+                text: root.pkg.name;
+                overflow: elide;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+                font-size: 13.5px;
+                font-weight: 500;
+                color: Theme.ink;
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 10;
+            min-width: 0px;
+            preferred-width: 0px;
+            Text {
+                width: 100%;
+                height: 100%;
+                text: root.pkg.id;
+                overflow: elide;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+                font-family: Theme.mono-font;
+                font-size: 11.5px;
+                color: Theme.ink-2;
+            }
+        }
+
+        Rectangle {
+            width: Cols.version;
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                Text {
+                    text: root.pkg.current;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    font-family: Theme.mono-font;
+                    font-size: 11.5px;
+                    color: Theme.ink-3;
+                }
+                Text {
+                    text: "→";
+                    vertical-alignment: center;
+                    font-size: 11.5px;
+                    color: Theme.ink-3;
+                }
+                Text {
+                    text: root.pkg.available;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    font-family: Theme.mono-font;
+                    font-size: 11.5px;
+                    font-weight: 700;
+                    color: Theme.ink;
+                }
+            }
+        }
+
+        Rectangle {
+            width: Cols.actions;
+            HorizontalLayout {
+                alignment: end;
+                spacing: 6px;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                GhostButton {
+                    label: "PIN…";
+                    enabled: root.interactive;
+                    clicked => { root.pin-requested(); }
+                }
+            }
+        }
+    }
+}
+
+component PinItem inherits Rectangle {
+    in property <PinRow> entry;
+    in property <bool> interactive: true;
+    callback remove-requested();
+
+    height: 46px;
+    background: ta.has-hover ? Theme.panel : transparent;
+
+    ta := TouchArea { width: 100%; height: 100%; }
+    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line; }
+
+    HorizontalLayout {
+        padding-left: Cols.gutter;
+        padding-right: Cols.gutter;
+        spacing: Cols.gap;
+
+        Rectangle { width: Cols.check; }
+
+        Rectangle {
+            horizontal-stretch: 15;
+            min-width: 0px;
+            preferred-width: 0px;
+            Text {
+                width: 100%;
+                height: 100%;
+                text: root.entry.name;
+                overflow: elide;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+                font-size: 13.5px;
+                font-weight: 500;
+                color: Theme.ink;
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 10;
+            min-width: 0px;
+            preferred-width: 0px;
+            Text {
+                width: 100%;
+                height: 100%;
+                text: root.entry.id;
+                overflow: elide;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+                font-family: Theme.mono-font;
+                font-size: 11.5px;
+                color: Theme.ink-2;
+            }
+        }
+
+        Rectangle {
+            width: Cols.version;
+            HorizontalLayout {
+                alignment: start;
+                padding-top: 13px;
+                padding-bottom: 13px;
+                Badge {
+                    label: root.entry.kind;
+                    tone: root.entry.blocking ? Theme.block : Theme.ink-2;
+                }
+            }
+        }
+
+        Rectangle {
+            width: Cols.actions;
+            HorizontalLayout {
+                alignment: end;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                GhostButton {
+                    label: "REMOVE PIN";
+                    enabled: root.interactive;
+                    clicked => { root.remove-requested(); }
+                }
+            }
+        }
+    }
+}
+
+component EmptyState inherits Rectangle {
+    in property <string> headline;
+    in property <string> detail;
+
+    background: transparent;
+    VerticalLayout {
+        alignment: center;
+        spacing: 10px;
+        padding: 40px;
+        Text {
+            text: root.headline;
+            horizontal-alignment: center;
+            font-family: Theme.display-font;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            color: Theme.ink-2;
+        }
+        Text {
+            text: root.detail;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+            font-size: 13px;
+            color: Theme.ink-3;
+        }
+    }
+}
+
+component ViewHeader inherits Rectangle {
+    in property <string> headline;
+    in property <string> detail;
+
+    background: transparent;
+    VerticalLayout {
+        alignment: start;
+        spacing: 7px;
+        Text {
+            text: root.headline;
+            font-family: Theme.display-font;
+            font-size: 25px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            color: Theme.ink;
+        }
+        Text {
+            text: root.detail;
+            wrap: word-wrap;
+            font-size: 13px;
+            color: Theme.ink-2;
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "tinyget";
+    // Without this Slint applies its own default logo, which overrides the icon
+    // embedded in the executable. The taskbar and Explorer still read that one.
+    icon: @image-url("assets/icon-32.png");
+    background: Theme.panel;
+    min-width: 900px;
+    min-height: 620px;
+    preferred-width: 1140px;
+    preferred-height: 760px;
+    default-font-family: Theme.ui-font;
+    default-font-size: 14px;
+
+    in property <[PackageRow]> upgrades;
+    in property <[PinRow]> pins;
+    in property <int> upgrade-count;
+    in property <int> selected-count;
+    in property <int> pinning-count;
+    in property <int> blocking-count;
+    in property <bool> busy;
+    // An upgrade is in flight in its own terminal. winget serialises, so the
+    // list goes read-only rather than letting a pin queue behind the install.
+    in property <bool> upgrading;
+    in property <bool> filtering;
+    in property <string> message;
+    in property <string> command-preview;
+    in property <string> client-version: "—";
+    in property <string> scanned-at: "—";
+
+    callback refresh();
+    callback toggle(string);
+    callback select-all();
+    callback filter-changed(string);
+    callback add-pin(string, bool);
+    callback remove-pin(string);
+    callback run-upgrade();
+
+    private property <int> view: 0;
+    private property <bool> dialog-open: false;
+    private property <string> target-id;
+    private property <string> target-name;
+    private property <bool> target-blocking: false;
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        // ------------------------------------------------ rail
+        Rectangle {
+            width: 206px;
+            background: Theme.panel;
+            Rectangle { x: parent.width - 1px; width: 1px; background: Theme.line; }
+
+            VerticalLayout {
+                padding-top: 20px;
+                spacing: 0px;
+
+                VerticalLayout {
+                    padding-left: 18px;
+                    padding-right: 18px;
+                    spacing: 0px;
+                    alignment: start;
+                    vertical-stretch: 0;
+                    Text {
+                        text: "WINDOWS PACKAGE MANAGER";
+                        font-family: Theme.mono-font;
+                        font-size: 8px;
+                        letter-spacing: 1.9px;
+                        color: Theme.ink-2;
+                    }
+                    Rectangle { height: 9px; }
+                    // The mark and the wordmark as one lockup. This used to be a
+                    // bare black rectangle standing in for a logo; now that there
+                    // is a real one, it goes here.
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 11px;
+                        Rectangle {
+                            horizontal-stretch: 0;
+                            width: 38px;
+                            Image {
+                                y: (parent.height - self.height) / 2;
+                                width: 38px;
+                                height: 38px;
+                                source: @image-url("assets/icon.svg");
+                                image-fit: contain;
+                            }
+                        }
+                        VerticalLayout {
+                            horizontal-stretch: 0;
+                            alignment: center;
+                            spacing: 0px;
+                            Text {
+                                text: "TINY";
+                                font-family: Theme.display-font;
+                                font-size: 21px;
+                                font-weight: 700;
+                                color: Theme.ink;
+                            }
+                            Text {
+                                text: "GET";
+                                font-family: Theme.display-font;
+                                font-size: 21px;
+                                font-weight: 700;
+                                color: Theme.ink;
+                            }
+                        }
+                    }
+                    Rectangle { height: 9px; }
+                    Text {
+                        text: "WINGET FRONT END";
+                        font-family: Theme.mono-font;
+                        font-size: 9px;
+                        letter-spacing: 1.5px;
+                        color: Theme.ink-3;
+                    }
+                    Rectangle { height: 20px; }
+                }
+
+                NavItem {
+                    label: "Upgrades";
+                    count: root.upgrade-count;
+                    active: root.view == 0;
+                    clicked => { root.view = 0; }
+                }
+                NavItem {
+                    label: "Pins";
+                    count: root.pinning-count + root.blocking-count;
+                    active: root.view == 1;
+                    clicked => { root.view = 1; }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+
+                VerticalLayout {
+                    padding-left: 17px;
+                    padding-right: 16px;
+                    padding-bottom: 16px;
+                    spacing: 5px;
+                    alignment: end;
+                    vertical-stretch: 0;
+                    Rectangle { height: 1px; background: Theme.line; }
+                    Rectangle { height: 7px; }
+                    for pair in [
+                        { k: "CLIENT", v: root.client-version },
+                        { k: "SOURCE", v: "winget" },
+                        { k: "SCANNED", v: root.scanned-at },
+                    ] : HorizontalLayout {
+                        Text {
+                            text: pair.k;
+                            font-family: Theme.mono-font;
+                            font-size: 9px;
+                            letter-spacing: 0.6px;
+                            color: Theme.ink-3;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: pair.v;
+                            font-family: Theme.mono-font;
+                            font-size: 9px;
+                            color: Theme.ink-2;
+                        }
+                    }
+                    Rectangle { height: 10px; }
+                    Text {
+                        text: "TG//UPG-01 · 4D5F 20A1 88C3";
+                        font-family: Theme.mono-font;
+                        font-size: 7.5px;
+                        letter-spacing: 0.5px;
+                        color: Theme.ink-3;
+                        opacity: 0.6;
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------ main
+        Rectangle {
+            background: Theme.paper;
+            clip: true;
+
+            Image {
+                width: 100%;
+                height: 100%;
+                source: @image-url("assets/contour.svg");
+                image-fit: ImageFit.cover;
+            }
+
+            VerticalLayout {
+                spacing: 0px;
+
+                // ---- header
+                Rectangle {
+                    vertical-stretch: 0;
+                    background: transparent;
+                    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line; }
+                    // Sits on the header's bottom rule, so waiting has a place to
+                    // show without adding a row that only exists some of the time.
+                    ActivityBar {
+                        y: parent.height - 2px;
+                        width: parent.width;
+                        active: root.busy || root.upgrading;
+                    }
+
+                    VerticalLayout {
+                        padding-left: Cols.gutter;
+                        padding-right: Cols.gutter;
+                        padding-top: 20px;
+                        padding-bottom: 16px;
+                        spacing: 14px;
+
+                        HorizontalLayout {
+                            spacing: 18px;
+
+                            if root.view == 0 : ViewHeader {
+                                horizontal-stretch: 1;
+                                headline: "UPGRADES AVAILABLE";
+                                detail: "Packages with a newer version in the winget source. Pinned packages are excluded automatically.";
+                            }
+                            if root.view == 1 : ViewHeader {
+                                horizontal-stretch: 1;
+                                headline: "PINNED PACKAGES";
+                                detail: "A pin holds a package back from upgrades. Remove one and it returns to the upgrade list on the next scan.";
+                            }
+
+                            VerticalLayout {
+                                horizontal-stretch: 0;
+                                alignment: start;
+                                Rectangle {
+                                    border-width: 1px;
+                                    border-color: Theme.line;
+                                    background: Theme.panel;
+                                    HorizontalLayout {
+                                        spacing: 0px;
+                                        if root.view == 0 : Tally {
+                                            caption: "AVAILABLE";
+                                            value: root.upgrade-count;
+                                        }
+                                        if root.view == 0 : Rectangle { width: 1px; background: Theme.line; }
+                                        if root.view == 0 : Tally {
+                                            caption: "SELECTED";
+                                            value: root.selected-count;
+                                        }
+                                        if root.view == 1 : Tally {
+                                            caption: "PINNING";
+                                            value: root.pinning-count;
+                                        }
+                                        if root.view == 1 : Rectangle { width: 1px; background: Theme.line; }
+                                        if root.view == 1 : Tally {
+                                            caption: "BLOCKING";
+                                            value: root.blocking-count;
+                                        }
+                                    }
+                                    CornerTicks { width: 100%; height: 100%; }
+                                }
+                            }
+                        }
+
+                        // ---- toolbar (upgrades only)
+                        if root.view == 0 : HorizontalLayout {
+                            spacing: 8px;
+                            Rectangle {
+                                horizontal-stretch: 0;
+                                width: 16px;
+                                TickBox {
+                                    y: (parent.height - self.height) / 2;
+                                    checked: root.selected-count > 0 && root.selected-count == root.upgrade-count;
+                                    mixed: root.selected-count > 0 && root.selected-count < root.upgrade-count;
+                                    enabled: !root.busy && !root.upgrading;
+                                    toggled => { root.select-all(); }
+                                }
+                            }
+                            Text {
+                                horizontal-stretch: 0;
+                                text: "SELECT ALL";
+                                vertical-alignment: center;
+                                font-family: Theme.mono-font;
+                                font-size: 9px;
+                                letter-spacing: 1.5px;
+                                color: Theme.ink-3;
+                            }
+                            Rectangle { horizontal-stretch: 0; width: 4px; }
+                            GhostButton {
+                                label: root.upgrading ? "UPGRADING…" : (root.busy ? "SCANNING…" : "REFRESH");
+                                enabled: !root.busy && !root.upgrading;
+                                clicked => { root.refresh(); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            Rectangle {
+                                horizontal-stretch: 0;
+                                width: 220px;
+                                height: 30px;
+                                border-width: 1px;
+                                border-color: Theme.line;
+                                background: Theme.panel;
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    filterbox := TextInput {
+                                        vertical-alignment: center;
+                                        font-family: Theme.ui-font;
+                                        font-size: 12.5px;
+                                        color: Theme.ink;
+                                        single-line: true;
+                                        edited => { root.filter-changed(self.text); }
+                                    }
+                                }
+                                if filterbox.text == "" : Text {
+                                    x: 10px;
+                                    y: (parent.height - self.height) / 2;
+                                    text: "Filter by name or ID";
+                                    font-size: 12.5px;
+                                    color: Theme.ink-3;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ---- message strip
+                if root.message != "" : Rectangle {
+                    vertical-stretch: 0;
+                    background: Theme.panel-2;
+                    height: 34px;
+                    Rectangle { x: 0; width: 2px; background: Theme.block; }
+                    HorizontalLayout {
+                        padding-left: Cols.gutter;
+                        padding-right: Cols.gutter;
+                        Text {
+                            text: root.message;
+                            overflow: elide;
+                            vertical-alignment: center;
+                            font-size: 12.5px;
+                            color: Theme.ink;
+                        }
+                    }
+                }
+
+                // ---- list
+                if root.view == 0 : ColumnHead {
+                    vertical-stretch: 0;
+                    third: "INSTALLED → AVAILABLE";
+                    fourth: "PIN";
+                }
+                if root.view == 1 : ColumnHead {
+                    vertical-stretch: 0;
+                    third: "PIN TYPE";
+                    fourth: "ACTION";
+                }
+
+                if root.view == 0 && root.upgrades.length > 0 : ListView {
+                    vertical-stretch: 1;
+                    for pkg in root.upgrades : UpgradeItem {
+                        pkg: pkg;
+                        interactive: !root.busy && !root.upgrading;
+                        toggled => { root.toggle(pkg.id); }
+                        pin-requested => {
+                            root.target-id = pkg.id;
+                            root.target-name = pkg.name;
+                            root.target-blocking = false;
+                            root.dialog-open = true;
+                        }
+                    }
+                }
+                if root.view == 0 && root.upgrades.length == 0 : EmptyState {
+                    vertical-stretch: 1;
+                    headline: root.busy ? "SCANNING" : (root.filtering ? "NO MATCH" : "EVERYTHING IS CURRENT");
+                    detail: root.busy
+                        ? "Asking winget which installed packages have a newer version."
+                        : (root.filtering
+                            ? "No package name or identifier contains that text."
+                            : "winget reports no upgrades available for the installed packages it can resolve.");
+                }
+
+                if root.view == 1 && root.pins.length > 0 : ListView {
+                    vertical-stretch: 1;
+                    for entry in root.pins : PinItem {
+                        entry: entry;
+                        interactive: !root.busy && !root.upgrading;
+                        remove-requested => { root.remove-pin(entry.id); }
+                    }
+                }
+                if root.view == 1 && root.pins.length == 0 : EmptyState {
+                    vertical-stretch: 1;
+                    headline: "NO PINS CONFIGURED";
+                    detail: "Pin a package from the upgrade list to hold it back. It will be listed here.";
+                }
+
+                // ---- action bar
+                if root.view == 0 : Rectangle {
+                    vertical-stretch: 0;
+                    height: 78px;
+                    background: Theme.panel;
+                    Rectangle { y: 0; height: 1.5px; background: Theme.ink; }
+
+                    HorizontalLayout {
+                        padding-left: Cols.gutter;
+                        padding-right: Cols.gutter;
+                        padding-top: 14px;
+                        padding-bottom: 14px;
+                        spacing: 18px;
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 5px;
+                            alignment: center;
+                            Text {
+                                text: root.upgrading ? "RUNNING IN YOUR DEFAULT TERMINAL" : "WILL RUN IN YOUR DEFAULT TERMINAL";
+                                font-family: Theme.mono-font;
+                                font-size: 9px;
+                                letter-spacing: 1.5px;
+                                color: Theme.ink-3;
+                            }
+                            Rectangle {
+                                height: 26px;
+                                background: Theme.panel-2;
+                                Rectangle { x: 0; width: 2px; background: Theme.ink-3; }
+                                HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    Text {
+                                        text: root.command-preview;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                        font-family: Theme.mono-font;
+                                        font-size: 10.5px;
+                                        color: Theme.ink-2;
+                                    }
+                                }
+                            }
+                        }
+
+                        HatchButton {
+                            label: root.upgrading
+                                ? "UPGRADING…"
+                                : (root.selected-count == 0
+                                    ? "NOTHING SELECTED"
+                                    : (root.selected-count == 1
+                                        ? "UPGRADE 1 PACKAGE"
+                                        : "UPGRADE {root.selected-count} PACKAGES"));
+                            enabled: root.selected-count > 0 && !root.busy && !root.upgrading;
+                            clicked => { root.run-upgrade(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------ pin dialog
+    if root.dialog-open : Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #edede8d9;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => { root.dialog-open = false; }
+        }
+
+        Rectangle {
+            width: 470px;
+            height: 430px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: Theme.panel;
+            border-width: 1.5px;
+            border-color: Theme.ink;
+
+            TouchArea { width: 100%; height: 100%; }
+
+            VerticalLayout {
+                spacing: 0px;
+
+                Rectangle {
+                    height: 42px;
+                    vertical-stretch: 0;
+                    Rectangle { y: parent.height - 1px; height: 1px; background: Theme.line; }
+                    HorizontalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        Text {
+                            text: "PIN PACKAGE";
+                            vertical-alignment: center;
+                            font-family: Theme.display-font;
+                            font-size: 13px;
+                            font-weight: 700;
+                            letter-spacing: 0.9px;
+                            color: Theme.ink;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Text {
+                            text: "winget pin add";
+                            vertical-alignment: center;
+                            font-family: Theme.mono-font;
+                            font-size: 9.5px;
+                            letter-spacing: 1.2px;
+                            color: Theme.ink-3;
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    padding: 18px;
+                    spacing: 16px;
+
+                    Rectangle {
+                        background: Theme.panel-2;
+                        height: 48px;
+                        Rectangle { x: 0; width: 2px; background: Theme.signal; }
+                        VerticalLayout {
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                text: root.target-name;
+                                overflow: elide;
+                                font-size: 13.5px;
+                                font-weight: 600;
+                                color: Theme.ink;
+                            }
+                            Text {
+                                text: root.target-id;
+                                overflow: elide;
+                                font-family: Theme.mono-font;
+                                font-size: 11px;
+                                color: Theme.ink-2;
+                            }
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: 10px;
+                        for opt in [
+                            {
+                                blocking: false,
+                                title: "PINNING",
+                                detail: "Held back from bulk upgrades, but you can still upgrade it deliberately from this list.",
+                                cmd: "winget pin add --id <id>",
+                            },
+                            {
+                                blocking: true,
+                                title: "BLOCKING",
+                                detail: "Refuses every upgrade, including a direct one. The pin has to be removed before this package can move.",
+                                cmd: "winget pin add --id <id> --blocking",
+                            },
+                        ] : Rectangle {
+                            property <bool> chosen: root.target-blocking == opt.blocking;
+                            height: 110px;
+                            background: chosen ? Theme.panel-2 : transparent;
+                            border-width: 1px;
+                            border-color: chosen ? Theme.ink : (optta.has-hover ? Theme.ink-2 : Theme.line);
+
+                            HorizontalLayout {
+                                padding: 13px;
+                                spacing: 12px;
+                                Rectangle {
+                                    horizontal-stretch: 0;
+                                    width: 14px;
+                                    Rectangle {
+                                        y: 3px;
+                                        width: 14px;
+                                        height: 14px;
+                                        background: transparent;
+                                        border-width: 1.5px;
+                                        border-color: chosen ? Theme.ink : Theme.ink-2;
+                                        if chosen : Rectangle {
+                                            x: 2px;
+                                            y: 2px;
+                                            width: 7px;
+                                            height: 7px;
+                                            background: Theme.signal;
+                                            border-width: 1px;
+                                            border-color: Theme.ink;
+                                        }
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: start;
+                                    spacing: 3px;
+                                    Text {
+                                        text: opt.title;
+                                        font-family: Theme.mono-font;
+                                        font-size: 11px;
+                                        font-weight: 700;
+                                        letter-spacing: 1.5px;
+                                        color: opt.blocking ? Theme.block : Theme.ink;
+                                    }
+                                    Text {
+                                        text: opt.detail;
+                                        wrap: word-wrap;
+                                        font-size: 12.5px;
+                                        color: Theme.ink-2;
+                                    }
+                                    Text {
+                                        text: opt.cmd;
+                                        font-family: Theme.mono-font;
+                                        font-size: 10px;
+                                        color: Theme.ink-3;
+                                    }
+                                }
+                            }
+
+                            optta := TouchArea {
+                                width: 100%;
+                                height: 100%;
+                                mouse-cursor: pointer;
+                                clicked => { root.target-blocking = opt.blocking; }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 55px;
+                    vertical-stretch: 0;
+                    Rectangle { y: 0; height: 1px; background: Theme.line; }
+                    HorizontalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        padding-top: 13px;
+                        padding-bottom: 13px;
+                        spacing: 9px;
+                        alignment: end;
+                        GhostButton {
+                            label: "CANCEL";
+                            clicked => { root.dialog-open = false; }
+                        }
+                        GhostButton {
+                            label: "ADD PIN";
+                            clicked => {
+                                root.add-pin(root.target-id, root.target-blocking);
+                                root.dialog-open = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
