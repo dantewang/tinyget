@@ -802,7 +802,7 @@ export component MainWindow inherits Window {
                                     ? "NOTHING SELECTED"
                                     : (root.selected-count == 1
                                         ? "UPGRADE 1 PACKAGE"
-                                        : "UPGRADE {root.selected-count} PACKAGES"));
+                                        : "UPGRADE \{root.selected-count} PACKAGES"));
                             enabled: root.selected-count > 0 && !root.busy && !root.upgrading;
                             clicked => { root.run-upgrade(); }
                         }
